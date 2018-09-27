@@ -28,6 +28,8 @@ use OCA\TwoFactorGateway\Service\Gateway\Signal\Gateway as SignalGateway;
 use OCA\TwoFactorGateway\Service\Gateway\Signal\GatewayConfig as SignalConfig;
 use OCA\TwoFactorGateway\Service\Gateway\SMS\Gateway as SMSGateway;
 use OCA\TwoFactorGateway\Service\Gateway\SMS\GatewayConfig as SMSConfig;
+use OCA\TwoFactorGateway\Service\Gateway\SMS\Provider\ClockworkSMSConfig;
+use OCA\TwoFactorGateway\Service\Gateway\SMS\Provider\ClxMbloxSmsConfig;
 use OCA\TwoFactorGateway\Service\Gateway\SMS\Provider\PlaySMSConfig;
 use OCA\TwoFactorGateway\Service\Gateway\SMS\Provider\WebSmsConfig;
 use OCA\TwoFactorGateway\Service\Gateway\Telegram\Gateway as TelegramGateway;
@@ -49,9 +51,10 @@ class Configure extends Command {
 	/** @var TelegramGateway */
 	private $telegramGateway;
 
-	public function __construct(SignalGateway $signalGateway,
-								SMSGateway $smsGateway,
-								TelegramGateway $telegramGateway) {
+	public function __construct(
+		SignalGateway $signalGateway,
+		SMSGateway $smsGateway,
+		TelegramGateway $telegramGateway) {
 		parent::__construct('twofactorauth:gateway:configure');
 		$this->signalGateway = $signalGateway;
 		$this->smsGateway = $smsGateway;
@@ -68,7 +71,7 @@ class Configure extends Command {
 		$gatewayName = $input->getArgument('gateway');
 
 		/** @var IGateway $gateway */
-		$gateway = null;
+		$gateway = NULL;
 		switch ($gatewayName) {
 			case 'signal':
 				$this->configureSignal($input, $output);
@@ -81,13 +84,16 @@ class Configure extends Command {
 				break;
 			default:
 				$output->writeln("<error>Invalid gateway $gatewayName</error>");
+
 				return;
 		}
 	}
 
 	private function configureSignal(InputInterface $input, OutputInterface $output) {
 		$helper = $this->getHelper('question');
-		$urlQuestion = new Question('Please enter the URL of the Signal gateway (leave blank to use default): ', 'http://localhost:5000');
+		$urlQuestion = new Question(
+			'Please enter the URL of the Signal gateway (leave blank to use default): ',
+			'http://localhost:5000');
 		$url = $helper->ask($input, $output, $urlQuestion);
 		$output->writeln("Using $url.");
 
@@ -99,7 +105,8 @@ class Configure extends Command {
 
 	private function configureSms(InputInterface $input, OutputInterface $output) {
 		$helper = $this->getHelper('question');
-		$providerQuestion = new Question('Please choose a SMS provider (websms, playsms, clockworksms): ', 'websms');
+		$providerQuestion =
+			new Question('Please choose a SMS provider (websms, playsms, clockworksms, clx_mblox): ', 'websms');
 		$provider = $helper->ask($input, $output, $providerQuestion);
 
 		/** @var SMSConfig $config */
@@ -146,6 +153,34 @@ class Configure extends Command {
 
 				$providerConfig->setApiToken($apitoken);
 
+				break;
+			case 'clx_mblox':
+				$config->setProvider($provider);
+				/** @var ClxMbloxSmsConfig $providerConfig */
+				$providerConfig = $config->getProvider()->getConfig();
+
+				$urlQuestion = new Question(
+					'Please enter CLX MBlox connection URL (1: London, UK | 2: Virginia, US | 3: Dallas, US | 5: Frankfurt, Germany | Custom URL string): ',
+					'1');
+				$urlNum = $helper->ask($input, $output, $urlQuestion);
+				if (is_numeric($urlNum)) {
+					$url = 'https://sms' . $urlNum . '.mblox.com:9444/HTTPSMS';
+				}
+				else {
+					$url = $urlNum;
+				}
+				$usernameQuestion = new Question('Please enter your HTTP SMS API username: ');
+				$username = $helper->ask($input, $output, $usernameQuestion);
+				$passwordQuestion = new Question('Please enter your HTTP SMS API password: ');
+				$password = $helper->ask($input, $output, $passwordQuestion);
+
+				$senderQuestion = new Question('Please enter SMS sender: ', 'Nextcloud');
+				$sender = $helper->ask($input, $output, $senderQuestion);
+
+				$providerConfig->setConnectionURL($url);
+				$providerConfig->setUser($username);
+				$providerConfig->setPassword($password);
+				$providerConfig->setSender($sender);
 				break;
 			default:
 				$output->writeln("Invalid provider $provider");
